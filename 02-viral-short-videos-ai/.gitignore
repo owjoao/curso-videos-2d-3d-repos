@@ -1,0 +1,27 @@
+__pycache__/
+.venv/
+node_modules/
+.env
+.env.*
+.envrc
+!.env.example
+
+# Local production inputs and outputs
+/channels/
+/episodes/
+/workspace/
+/research/
+/reference-media/
+/output/
+
+# Tracked showcase examples keep only reproducible sources and small previews.
+/examples/**/.audio-takes/
+/examples/**/.studio-*/
+/examples/**/__pycache__/
+
+# Local speech models and generated takes
+/audio-models/
+.audio-takes/
+
+# Per-checkout sandbox state
+.dev/

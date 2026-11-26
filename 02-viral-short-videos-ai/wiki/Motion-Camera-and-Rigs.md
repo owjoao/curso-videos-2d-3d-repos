@@ -1,0 +1,175 @@
+# 🎥 Motion, Camera and Rigs
+
+Smooth animation comes from pose contrast, good spacing, and a camera that supports the beat instead of fighting it.
+
+## 🌀 Easings
+
+| Easing | Feel |
+| --- | --- |
+| `linear` | Constant. Use for spins and mechanical motion |
+| `in` | Accelerate into the pose |
+| `out` | Decelerate into the pose |
+| `smooth` | Smoothstep |
+| `sine` | Gentle in/out |
+| `expo` | Fast, decisive arrival |
+| `circ` | Soft deceleration |
+| `quint` | Long, controlled settle |
+| `back` | Overshoot |
+| `elastic` | Springy overshoot |
+| `bounce` | Physical bounce |
+| `spring` | Damped settle |
+| `hold` | Step, no interpolation |
+
+Use `back`/`spring` for takes, `expo` for whips and impacts, `hold` for switches.
+
+## 🧍 Parent and pivot
+
+```json
+{"id": "body", "kind": "rect", "x": 0.5, "y": 0.62, "width": 0.3, "height": 0.28,
+ "fill": "secondary", "radius": 0.5, "pivot": [0.5, 0.5]},
+{"id": "head", "kind": "ellipse", "parent": "body", "x": 0, "y": -0.23,
+ "width": 0.22, "height": 0.22, "fill": "foreground", "pivot": [0.5, 0.85]}
+```
+
+A child’s `x` and `y` are offsets from the parent pivot. The renderer inherits parent scale, rotation and opacity. Keep parent and child on the same plane.
+
+## 👁️ Visible variants
+
+```json
+{"id": "eye-open", "parent": "head", "variant_group": "eyes"},
+{"id": "eye-blink", "parent": "head", "variant_group": "eyes", "visible": false,
+ "keyframes": [{"at": 0.6, "visible": true}, {"at": 0.7, "visible": false}]}
+```
+
+At most one layer in a `variant_group` draws. This is the fast path for blinks, expressions and prop states.
+
+## 🎥 Camera
+
+```json
+{
+  "camera": {
+    "preset": "push-in",
+    "shake": {"amplitude": 0.008, "frequency": 11, "decay": 0.35}
+  }
+}
+```
+
+Presets:
+
+| Preset | Move |
+| --- | --- |
+| `push-in` | Gentle zoom toward the subject |
+| `pull-out` | Reveal the wider scene |
+| `crash-zoom` | Fast zoom that settles |
+| `whip-pan` | Lateral snap |
+| `dolly` | Slide and slight zoom |
+| `float` | Slow vertical drift |
+| `orbit` | Small circular drift |
+| `handheld` | Procedural handheld noise |
+
+Per-layer `parallax` scales the camera move: backgrounds move less, foregrounds more.
+
+### Cuts, zoom and the set
+
+- **Cut between setups with a `hold` key.** Several framings of one performance read as edited shots. Put each cut key half a frame in (`at` = (frame + 0.5) / frames), so motion blur never blends the two framings into one frame; film QA reports `ghost-cut` if it does.
+- **Zoom moves at an even visual rate.** Zoom keys interpolate in log space: a linear key from 1× to 4× passes 2× halfway, so the ease you write is the shape you see.
+- **Keep the set on the camera, and larger than the frame.** A set pinned with `parallax: 0` stays still while the cast zooms, so characters slide off their floor. A set drawn exactly frame-size shows empty canvas when the camera pans or pulls out past it. `make validate` warns about the second, with how far and when.
+- **Let a move land.** A push that eases back out, or a pan across and back, within a second reads as a wobble. `make validate` flags it; hold the end of the move or cut instead.
+
+## 🫧 Squash, stretch and skew
+
+Use independent axes for weight and impact:
+
+```json
+{"at": 0.45, "scale_x": 1.18, "scale_y": 0.82, "ease": "back"}
+```
+
+`skew_x` and `skew_y` add lean, wind-up, and smear shapes. `scale` remains the
+uniform fallback for older episodes.
+
+## 📈 Easing
+
+Named easings still work. Add a cubic-bezier or spring when the timing needs
+more character:
+
+```json
+{"at": 1, "x": 0.7, "ease": {"type": "cubic-bezier", "points": [0.2, 0, 0, 1]}}
+```
+
+`ease_props` lets one property use a different curve:
+
+```json
+{"at": 1, "scale_x": 1.1, "ease": "back",
+ "ease_props": {"opacity": "linear"}}
+```
+
+`auto` smooths a multi-key move through its neighbours. `blur` is also
+animatable, so a rack focus or impact smear can live on the layer itself.
+Camera shake now respects the keyframe easing instead of flattening it.
+
+## 🌫️ Motion blur
+
+```json
+{"motion_blur": 0.3}
+```
+
+The Python renderer accumulates subframes. The browser renderer blends the previous frame. Start around `0.2–0.35`, preview, then lower it if contacts smear.
+
+## 🧪 Physics helpers
+
+`studio/physics.py` samples:
+
+- `drop()` — fall, bounce, settle, squash
+- `burst()` — debris and particles
+- `splash()` — liquid crowns
+- `shake()` — decaying camera jitter
+- `spring()` — overshoot between positions
+- `orbit()` — floating props
+- `pendulum()` — swings and tails
+
+## 🌠 Trails and echoes
+
+Add a delayed echo without extra layers:
+
+```json
+{"trail": {"count": 3, "spacing": 0.05, "opacity": 0.55, "scale_falloff": 0.9}}
+```
+
+The studio expands the trail into ordinary layers, so every renderer sees the
+same result.
+
+## 🎛️ Motion recipes
+
+`make motion MOTION=impact` emits ready-to-paste keyframes. Available recipes:
+`pop`, `impact`, `anticipate`, `settle`, `float`, `breathe`, `enter`, and
+`exit`. Combine recipes that animate different properties with
+`studio.motion.merge`.
+
+Recipes, keyframes and camera keys can be timed to a spoken word or to the music's beat with `at_word` / `at_beat` instead of `t` / `at` (see Anchors in the [Manifest Reference](Manifest-Reference)): `{"recipe": "impact", "at_word": "crash"}` lands the impact on the word however the take is re-recorded.
+
+`studio.physics.to_layer_keys()` and `to_object_keys()` convert sampled physics
+tracks into manifest keyframes, including 2D squash.
+
+## 👁️ Review a frame first
+
+```sh
+make still EPISODE=... SHOT=A PROGRESS=0.5
+make still EPISODE=... SHOT=A SHEET=5
+```
+
+This is the fastest way to check a contact, a caption, a glow, or a squash
+before committing to a full render.
+
+## ✅ Review
+
+- Step through every contact frame.
+- Check planted feet and held props.
+- Compare the first and last frame of a camera move.
+- Watch muted: the action should still read.
+- Watch with sound: the contact should land on the sound.
+
+## 🔗 Related guides
+
+- [VFX and Post](VFX-and-Post)
+- [Captions and Typography](Captions-and-Typography)
+- [3D and Renderers](3D-and-Renderers)

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="473" viewBox="0 0 760 473" role="img" aria-labelledby="title desc">
+  <title id="title">Make an episode with prompts</title>
+  <desc id="desc">Write a brief, review the beat sheet and audio, then check the preview before exporting.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#111127"/>
+      <stop offset="1" stop-color="#101D33"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="758" height="471" rx="22" fill="url(#background)" stroke="#364664" stroke-width="2"/>
+  <g font-family="system-ui, Arial, sans-serif">
+    <text x="30" y="59" fill="#F8FAFC" font-size="34" font-weight="700">Make an episode with prompts</text>
+    <g transform="translate(30 85)">
+      <rect width="340" height="101" rx="12" fill="#1C2941" stroke="#3D4F70"/>
+      <rect x="12" y="14" width="4" height="73" rx="2" fill="#C4B5FD"/>
+      <text x="30" y="33" fill="#C4B5FD" font-size="24" font-weight="700">1. Brief</text>
+      <text x="30" y="61" fill="#F1F5F9" font-size="21">Set the audience, length</text>
+      <text x="30" y="85" fill="#CBD5E1" font-size="21">and channel style</text>
+    </g>
+    <g transform="translate(390 85)">
+      <rect width="340" height="101" rx="12" fill="#1C2941" stroke="#3D4F70"/>
+      <rect x="12" y="14" width="4" height="73" rx="2" fill="#93C5FD"/>
+      <text x="30" y="33" fill="#93C5FD" font-size="24" font-weight="700">2. Beat sheet</text>
+      <text x="30" y="61" fill="#F1F5F9" font-size="21">Approve the hook,</text>
+      <text x="30" y="85" fill="#CBD5E1" font-size="21">turn and payoff</text>
+    </g>
+    <g transform="translate(30 206)">
+      <rect width="340" height="101" rx="12" fill="#1C2941" stroke="#3D4F70"/>
+      <rect x="12" y="14" width="4" height="73" rx="2" fill="#5EEAD4"/>
+      <text x="30" y="33" fill="#5EEAD4" font-size="24" font-weight="700">3. Audio pass</text>
+      <text x="30" y="61" fill="#F1F5F9" font-size="21">Listen for clear voices,</text>
+      <text x="30" y="85" fill="#CBD5E1" font-size="21">timing and sound effects</text>
+    </g>
+    <g transform="translate(390 206)">
+      <rect width="340" height="101" rx="12" fill="#1C2941" stroke="#3D4F70"/>
+      <rect x="12" y="14" width="4" height="73" rx="2" fill="#FDE68A"/>
+      <text x="30" y="33" fill="#FDE68A" font-size="24" font-weight="700">4. Video preview</text>
+      <text x="30" y="61" fill="#F1F5F9" font-size="21">Check the action and</text>
+      <text x="30" y="85" fill="#CBD5E1" font-size="21">captions on a phone</text>
+    </g>
+    <g transform="translate(30 327)">
+      <rect width="340" height="101" rx="12" fill="#1C2941" stroke="#3D4F70"/>
+      <rect x="12" y="14" width="4" height="73" rx="2" fill="#F9A8D4"/>
+      <text x="30" y="33" fill="#F9A8D4" font-size="24" font-weight="700">5. Revise</text>
+      <text x="30" y="61" fill="#F1F5F9" font-size="21">Describe the change</text>
+      <text x="30" y="85" fill="#CBD5E1" font-size="21">and where it happens</text>
+    </g>
+    <g transform="translate(390 327)">
+      <rect width="340" height="101" rx="12" fill="#1C2941" stroke="#3D4F70"/>
+      <rect x="12" y="14" width="4" height="73" rx="2" fill="#86EFAC"/>
+      <text x="30" y="33" fill="#86EFAC" font-size="24" font-weight="700">6. Export</text>
+      <text x="30" y="61" fill="#F1F5F9" font-size="21">Collect the master and</text>
+      <text x="30" y="85" fill="#CBD5E1" font-size="21">platform upload copy</text>
+    </g>
+  </g>
+</svg>

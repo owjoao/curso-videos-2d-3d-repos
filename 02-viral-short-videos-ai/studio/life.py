@@ -1,0 +1,184 @@
+"""Give rigged characters automatic life: breathe, blink, glance, sway, talk.
+
+A still character between key poses reads as dead. Put ``alive`` on a ``use``
+layer (or any layer) and this expander adds the small, continuous, seeded
+motion animators layer under acting:
+
+    {"id": "pip", "kind": "use", "ref": "pip", "x": 0.5, "y": 0.86,
+     "alive": {"talk": "Pip", "energy": 1}}
+
+``alive: true`` turns everything on. Each part is found by its ``role`` tag
+(see ``studio/character.py``): body/head breathe and sway, tails wag and curl (``bend``), ears and antennae
+follow through a beat later, arms drift, eyes blink at natural intervals,
+pupils make quick glances, and the mouth talks with the speaker's voice. A rig
+with a viseme mouth set (``mbp``/``e``/``u``/``fv``/``l``/``etc``, as ``make character``
+writes) lip-syncs to the line (``studio/lipsync.py``); other rigs swap the rest
+shape for an open one that flaps with loudness. ``"lipsync": false`` forces the flap. Motion is added on top of whatever
+keys the author wrote, so acting keys still drive the big moves.
+"""
+
+from hashlib import sha256
+import math
+import random
+
+from .keys import compose
+
+ASPECT = 9 / 16
+DEFAULTS = {"breathe": 1.0, "blink": 1.0, "look": 1.0, "sway": 1.0, "talk": None, "energy": 1.0, "lipsync": "auto"}
+
+
+def _settings(value):
+    if value is True:
+        return dict(DEFAULTS)
+    settings = {**DEFAULTS, **(value or {})}
+    for key in ("breathe", "blink", "look", "sway"):
+        if settings[key] is True:
+            settings[key] = 1.0
+        elif settings[key] is False or settings[key] is None:
+            settings[key] = 0.0
+    return settings
+
+
+def _rng(*parts):
+    return random.Random(int.from_bytes(sha256("\0".join(map(str, parts)).encode()).digest()[:8], "big"))
+
+
+def blink_curve(duration, rng, amount):
+    """Scale-y multiplier for the eyes: quick close, short hold, slower open."""
+    times, t = [], rng.uniform(0.5, 1.4)
+    while t < duration - 0.2:
+        times.append(t)
+        if rng.random() < 0.18:  # Occasional double blink.
+            times.append(t + 0.26)
+        t += rng.uniform(2.2, 4.6) / max(0.4, amount)
+
+    def curve(now):
+        value = 1.0
+        for start in times:
+            local = now - start
+            if 0 <= local < 0.06:
+                value = min(value, 1 - 0.92 * (local / 0.06))
+            elif 0.06 <= local < 0.10:
+                value = min(value, 0.08)
+            elif 0.10 <= local < 0.19:
+                value = min(value, 0.08 + 0.92 * ((local - 0.10) / 0.09) ** 0.7)
+        return value
+    return curve, times
+
+
+def glance_curve(duration, rng, reach):
+    """Pupil offset: hold a look, then a fast 3-frame saccade to the next."""
+    targets, t = [(0.0, 0.0, 0.0)], rng.uniform(0.8, 1.8)
+    while t < duration:
+        targets.append((t, rng.uniform(-1, 1) * reach, rng.uniform(-0.5, 0.4) * reach))
+        t += rng.uniform(1.1, 2.8)
+
+    def curve(now):
+        x = y = 0.0
+        for index, (start, tx, ty) in enumerate(targets):
+            if now < start:
+                break
+            px, py = (targets[index - 1][1], targets[index - 1][2]) if index else (0.0, 0.0)
+            k = min(1.0, (now - start) / 0.1)
+            k = 1 - (1 - k) ** 3
+            x, y = px + (tx - px) * k, py + (ty - py) * k
+        return x, y
+    return curve
+
+
+def _wave(period, phase):
+    return lambda t: math.sin(2 * math.pi * t / period + phase)
+
+
+def animate(shot, layer, settings):
+    duration = float(shot["duration"])
+    prefix = layer["id"] + "/"
+    members = [item for item in shot["layers"] if item["id"].startswith(prefix)] or [layer]
+    roles = {}
+    for item in members:
+        roles.setdefault(item.get("role", "body" if item is layer else None), []).append(item)
+    energy = float(settings["energy"])
+    rng = _rng(shot["id"], layer["id"], settings.get("seed", 0))
+    phase = rng.uniform(0, math.tau)
+    breath = _wave(rng.uniform(2.4, 3.1), phase)
+    sway = _wave(rng.uniform(3.4, 4.4), phase + 1.1)
+    plan = {}
+
+    def add(item, fn):
+        plan.setdefault(item["id"], (item, []))[1].append(fn)
+
+    b = settings["breathe"] * energy
+    if b:
+        for item in roles.get("body", []):
+            add(item, lambda t: {"scale_xy": ("mul", (1 - 0.012 * b * breath(t), 1 + 0.024 * b * breath(t)))})
+        for item in roles.get("arm", []):
+            side = -1 if item["id"].endswith("-l") else 1
+            add(item, lambda t, side=side: {"rotate": ("add", side * 2.5 * b * breath(t - 0.35))})
+        for item in roles.get("shadow", []):
+            add(item, lambda t: {"scale_x": ("mul", 1 + 0.015 * b * breath(t))})
+    s = settings["sway"] * energy
+    if s:
+        for item in roles.get("head", []) or roles.get("body", []):
+            add(item, lambda t: {"rotate": ("add", 1.6 * s * sway(t))})
+        for item in roles.get("ear", []) + roles.get("antenna", []):
+            add(item, lambda t: {"rotate": ("add", 4.5 * s * sway(t - 0.28))})  # Follow-through lag.
+        wag = _wave(rng.uniform(0.8, 1.1), phase + 0.5)
+        for item in roles.get("tail", []):
+            # Tails swing at the base and curl along their length (bend), lagging the body.
+            add(item, lambda t: {"rotate": ("add", 7 * s * wag(t)), "bend": ("add", 16 * s * wag(t - 0.15))})
+    if members[0] is not layer and (roles.get("ear") or roles.get("antenna")):
+        # Ears and antennae swing against the character's own moves (jumps, hops, paths).
+        from .moves import follow
+        by_id = {item["id"]: item for item in shot["layers"]}
+        for item in roles.get("ear", []) + roles.get("antenna", []):
+            add(item, follow({"target": layer["id"], "mode": "drag", "gain": 5 * energy}, item, by_id,
+                             duration, ASPECT))
+    k = settings["blink"]
+    if k and roles.get("eye"):
+        blink, _ = blink_curve(duration, rng, k)
+        for item in roles["eye"]:
+            add(item, lambda t: {"scale_y": ("mul", blink(t))})
+        for item in roles.get("brow", []):
+            add(item, lambda t: {"y": ("add", (1 - blink(t)) * 0.004)})
+    g = settings["look"]
+    if g and roles.get("pupil"):
+        eye_width = min(float(item.get("width", 0.04)) for item in roles.get("eye", [{"width": 0.04}]))
+        glance = glance_curve(duration, rng, eye_width * 0.16 * g)
+        for item in roles["pupil"]:
+            add(item, lambda t: {"x": ("add", glance(t)[0]), "y": ("add", glance(t)[1] * 0.6)})
+    speaker = settings.get("talk")
+    mouths = roles.get("mouth", [])
+    shapes = {item.get("mouth_shape", "rest") for item in mouths}
+    lipsync = settings.get("lipsync", "auto")
+    if lipsync == "auto":
+        lipsync = len(shapes & {"mbp", "e", "u", "fv", "l", "etc", "ai"}) >= 2
+    if speaker and lipsync:
+        for item in mouths:
+            shape = item.get("mouth_shape", "rest")
+            item.update({"viseme_for": speaker, "viseme": shape})  # lipsync.resolve maps ai to open, etc.
+    elif speaker:
+        for item in roles.get("mouth", []):
+            shape = item.get("mouth_shape", "rest")
+            if shape == "rest":
+                item["quiet_for"] = speaker
+                item.pop("variant_group", None)
+            elif shape == "open":
+                item.update({"mouth_for": speaker, "talk_only": True, "visible": True})
+                item.pop("variant_group", None)
+                item["keyframes"] = [key for key in item.get("keyframes", []) if "visible" not in key]
+    for item, modifiers in plan.values():
+        compose(item, duration, modifiers)
+
+
+def expand(episode):
+    """Apply ``alive`` on every layer that declares it. Run after defs expansion."""
+    for scene in episode.get("scenes", []):
+        for shot in scene.get("shots", []):
+            for layer in list(shot.get("layers", [])):
+                if "alive" not in layer:
+                    continue
+                settings = _settings(layer.pop("alive"))
+                if settings is not None:
+                    animate(shot, layer, settings)
+    return episode
+

@@ -1,0 +1,1550 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:viral-short-videos:studio",
+  "title": "Viral Short Videos Studio",
+  "description": "Manifest definitions for channels, episodes, libraries and reusable recipes.",
+  "$defs": {
+    "light2d": {
+      "description": "Scene light for layers marked lit: body shading and a rim light from one direction.",
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "angle": {"description": "Where the light comes from on screen, degrees (0 right, 90 top, 135 top left).",
+                  "type": "number", "minimum": -360, "maximum": 360},
+        "color": {"$ref": "#/$defs/text"},
+        "intensity": {"type": "number", "minimum": 0, "maximum": 2},
+        "shadow": {"$ref": "#/$defs/unit"},
+        "shadow_color": {"$ref": "#/$defs/text"},
+        "rim": {"type": "number", "minimum": 0, "maximum": 2},
+        "softness": {"description": "Rim width as a fraction of the layer size.", "type": "number", "minimum": 0.005, "maximum": 0.3},
+        "depth": {"description": "How round the body shading is, as a fraction of the layer size.", "type": "number", "minimum": 0.02, "maximum": 0.6},
+        "elevation": {"description": "Light height: low values rake across the shape, high values light it flat.", "type": "number", "minimum": 0.1, "maximum": 3}
+      }
+    },
+    "text": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "tags": {"type": "array", "items": {"$ref": "#/$defs/text"}, "minItems": 1, "uniqueItems": true},
+    "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
+    "paint": {
+      "description": "A hex colour or a named palette role.",
+      "anyOf": [
+        {"$ref": "#/$defs/color"},
+        {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+      ]
+    },
+    "ease": {
+      "description": "A named easing, a cubic-bezier curve, or a spring.",
+      "anyOf": [
+        {"enum": ["linear", "in", "out", "smooth", "sine", "expo", "circ", "quint", "back", "elastic", "bounce", "spring", "hold", "auto"]},
+        {
+          "type": "object", "required": ["type"], "additionalProperties": false,
+          "properties": {
+            "type": {"enum": ["cubic-bezier", "spring"]},
+            "points": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number", "minimum": -2, "maximum": 3}},
+            "stiffness": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000},
+            "damping": {"type": "number", "minimum": 0, "maximum": 200},
+            "mass": {"type": "number", "exclusiveMinimum": 0, "maximum": 100}
+          },
+          "if": {"properties": {"type": {"const": "cubic-bezier"}}},
+          "then": {"required": ["points"]}
+        }
+      ]
+    },
+    "gradient": {
+      "type": "object", "required": ["stops"], "additionalProperties": false,
+      "properties": {
+        "type": {"enum": ["linear", "radial"], "default": "linear"},
+        "angle": {"type": "number", "minimum": -360, "maximum": 360, "default": 90},
+        "center": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/unit"}},
+        "radius": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "stops": {
+          "type": "array", "minItems": 2, "maxItems": 16,
+          "items": {
+            "type": "object", "required": ["at", "color"], "additionalProperties": false,
+            "properties": {"at": {"$ref": "#/$defs/unit"}, "color": {"$ref": "#/$defs/paint"}}
+          }
+        }
+      }
+    },
+    "stroke": {
+      "type": "object", "required": ["width"], "additionalProperties": false,
+      "properties": {
+        "width": {"$ref": "#/$defs/unit"},
+        "color": {"$ref": "#/$defs/paint"}
+      }
+    },
+    "shadow": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "color": {"$ref": "#/$defs/paint"},
+        "offset_x": {"type": "number", "minimum": -0.5, "maximum": 0.5},
+        "offset_y": {"type": "number", "minimum": -0.5, "maximum": 0.5},
+        "blur": {"$ref": "#/$defs/unit"},
+        "opacity": {"$ref": "#/$defs/unit"}
+      }
+    },
+    "glow": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "color": {"$ref": "#/$defs/paint"},
+        "size": {"$ref": "#/$defs/unit"},
+        "opacity": {"$ref": "#/$defs/unit"}
+      }
+    },
+    "reveal": {
+      "type": "object", "required": ["mode"], "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["word", "line", "character"]},
+        "start": {"$ref": "#/$defs/unit"},
+        "stagger": {"type": "number", "minimum": 0, "maximum": 0.2},
+        "fade": {"type": "boolean"}
+      }
+    },
+    "trail": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "count": {"type": "integer", "minimum": 1, "maximum": 8},
+        "spacing": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "opacity": {"$ref": "#/$defs/unit"},
+        "scale_falloff": {"$ref": "#/$defs/unit"},
+        "blend": {"enum": ["normal", "add", "screen", "multiply", "overlay", "soft-light"]}
+      }
+    },
+    "unit": {"type": "number", "minimum": 0, "maximum": 1},
+    "seconds": {"type": "number", "minimum": 0, "maximum": 720},
+    "path": {"type": "string", "minLength": 1},
+    "camera_key": {
+      "type": "object", "additionalProperties": false,
+      "anyOf": [{"required": ["at"]}, {"required": ["at_word"]}, {"required": ["at_beat"]}],
+      "properties": {
+        "at": {"$ref": "#/$defs/unit"},
+        "at_word": {"$ref": "#/$defs/anchor_word"},
+        "at_beat": {"$ref": "#/$defs/anchor_beat"},
+        "ease": {"$ref": "#/$defs/ease"},
+        "x": {"type": "number", "minimum": -1, "maximum": 1},
+        "y": {"type": "number", "minimum": -1, "maximum": 1},
+        "zoom": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "rotate": {"type": "number", "minimum": -180, "maximum": 180},
+        "fov": {"type": "number", "minimum": 10, "maximum": 110},
+        "z": {"type": "number", "minimum": -2, "maximum": 50}
+      }
+    },
+    "camera": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "x": {"type": "number", "minimum": -1, "maximum": 1},
+        "y": {"type": "number", "minimum": -1, "maximum": 1},
+        "zoom": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "rotate": {"type": "number", "minimum": -180, "maximum": 180},
+        "preset": {"enum": ["push-in", "pull-out", "crash-zoom", "whip-pan", "dolly", "float", "orbit", "handheld", "dolly-in", "dolly-out", "dolly-zoom", "fly-through"]},
+        "z": {"type": "number", "minimum": -2, "maximum": 50},
+        "fov": {"type": "number", "minimum": 10, "maximum": 110},
+        "focus": {
+          "description": "Depth of field for z layers: blur grows outside z ± range.",
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "z": {"type": "number", "minimum": -1, "maximum": 50},
+            "range": {"type": "number", "minimum": 0, "maximum": 50},
+            "amount": {"$ref": "#/$defs/unit"}
+          }
+        },
+        "samples": {"type": "integer", "minimum": 2, "maximum": 240},
+        "shake": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "amplitude": {"type": "number", "minimum": 0, "maximum": 0.2},
+            "frequency": {"type": "number", "minimum": 0.1, "maximum": 60},
+            "decay": {"type": "number", "minimum": 0, "maximum": 1},
+            "seed": {"type": "number"}
+          }
+        },
+        "handheld": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "amplitude": {"type": "number", "minimum": 0, "maximum": 0.05},
+            "frequency": {"type": "number", "minimum": 0.1, "maximum": 12},
+            "seed": {"type": "number"}
+          }
+        },
+        "track": {
+          "type": "object", "required": ["layer"], "additionalProperties": false,
+          "properties": {
+            "layer": {"$ref": "#/$defs/text"},
+            "x": {"type": "number", "minimum": -1, "maximum": 2},
+            "y": {"type": "number", "minimum": -1, "maximum": 2}
+          }
+        },
+        "shakes": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["at"], "additionalProperties": false,
+            "properties": {
+              "at": {"$ref": "#/$defs/unit"},
+              "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 5},
+              "amplitude": {"type": "number", "minimum": 0, "maximum": 0.2},
+              "frequency": {"type": "number", "minimum": 0.1, "maximum": 60},
+              "decay": {"type": "number", "minimum": 0, "maximum": 1},
+              "seed": {"type": "number"}
+            }
+          }
+        },
+        "keyframes": {"type": "array", "items": {"$ref": "#/$defs/camera_key"}}
+      }
+    },
+    "post": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "grain": {"$ref": "#/$defs/unit"},
+        "paper": {"description": "Static paper/print texture multiplied over the frame.", "$ref": "#/$defs/unit"},
+        "grade": {"enum": ["teal-orange", "warm-film", "cool-night", "bleach", "vintage", "pastel"]},
+        "lut": {"description": "A .cube 3D LUT: a path from the repository root or a name in presets/luts/.", "$ref": "#/$defs/text"},
+        "grade_amount": {"$ref": "#/$defs/unit"},
+        "leak": {"description": "Warm light leak from the top-right corner that breathes slowly.", "$ref": "#/$defs/unit"},
+        "vignette": {"$ref": "#/$defs/unit"},
+        "bloom": {"$ref": "#/$defs/unit"},
+        "blur": {"$ref": "#/$defs/unit"},
+        "chromatic": {"$ref": "#/$defs/unit"},
+        "letterbox": {"$ref": "#/$defs/unit"},
+        "brightness": {"type": "number", "minimum": 0, "maximum": 2},
+        "contrast": {"type": "number", "minimum": 0, "maximum": 2},
+        "saturation": {"type": "number", "minimum": 0, "maximum": 2},
+        "hue": {"type": "number", "minimum": -180, "maximum": 180},
+        "tint": {"$ref": "#/$defs/paint"}
+      }
+    },
+    "style": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "preset": {"$ref": "#/$defs/text"},
+        "energy": {"$ref": "#/$defs/unit"}
+      }
+    },
+    "music": {
+      "type": "object", "additionalProperties": false,
+      "anyOf": [{"required": ["preset"]}, {"required": ["file"]}, {"required": ["mood"]}, {"required": ["energy"]},
+                {"required": ["bpm"]}, {"required": ["library_file"]}],
+      "not": {"required": ["preset", "file"]},
+      "properties": {
+        "preset": {"const": "pulse"},
+        "file": {"$ref": "#/$defs/path"},
+        "mood": {"description": "Pick a track from the channel music_library by mood.",
+                 "enum": ["calm", "happy", "funny", "epic", "tense", "sad", "action", "dreamy"]},
+        "energy": {"enum": ["low", "medium", "high"]},
+        "bpm": {"description": "Preferred tempo range [min, max].", "type": "array", "minItems": 2, "maxItems": 2,
+                "items": {"type": "number", "minimum": 40, "maximum": 240}},
+        "library_file": {"description": "Set by the music expander; do not author.", "type": "string"},
+        "beat": {
+          "description": "The track's beat grid for at_beat and snap. Set by the music library; author it for other files.",
+          "type": "object", "required": ["bpm"], "additionalProperties": false,
+          "properties": {
+            "bpm": {"type": "number", "minimum": 40, "maximum": 240},
+            "offset": {"description": "Seconds to the first beat.", "type": "number", "minimum": 0, "maximum": 30},
+            "per_bar": {"type": "integer", "minimum": 2, "maximum": 12}
+          }
+        },
+        "library_track": {"type": "string"},
+        "fit": {"description": "Arrange a library track to the episode's length on bar lines, keeping its own opening and ending (default true).", "type": "boolean"},
+        "arrangement": {"description": "Set by the music expander; do not author.", "type": "object"},
+        "gain": {"$ref": "#/$defs/unit"},
+        "loop": {"type": "boolean"},
+        "fade_in": {"type": "number", "minimum": 0, "maximum": 30},
+        "fade_out": {"type": "number", "minimum": 0, "maximum": 30},
+        "duck": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "amount": {"$ref": "#/$defs/unit"},
+            "attack": {"type": "number", "minimum": 0, "maximum": 2},
+            "release": {"type": "number", "minimum": 0, "maximum": 3}
+          }
+        },
+        "sfx_duck": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "amount": {"$ref": "#/$defs/unit"},
+            "attack": {"type": "number", "minimum": 0, "maximum": 2},
+            "release": {"type": "number", "minimum": 0, "maximum": 3}
+          }
+        }
+      }
+    },
+    "style_preset": {
+      "type": "object", "required": ["name"], "additionalProperties": false,
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "description": {"$ref": "#/$defs/text"},
+        "camera": {"$ref": "#/$defs/camera"},
+        "motion_blur": {"$ref": "#/$defs/unit"},
+        "supersample": {"type": "integer", "minimum": 1, "maximum": 2},
+        "post": {"$ref": "#/$defs/post"},
+        "captions": {"$ref": "#/$defs/captions"},
+        "audio": {"$ref": "#/$defs/audio"},
+        "render": {"$ref": "#/$defs/render"},
+        "music": {"$ref": "#/$defs/music"}
+      }
+    },
+    "captions": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "style": {"enum": ["box", "karaoke", "minimal", "kinetic"]},
+        "preset": {"enum": ["hormozi-pop", "clean-karaoke", "kinetic-big", "documentary-lower", "typewriter"]},
+        "words_per_page": {"type": "integer", "minimum": 1, "maximum": 8},
+        "word_in": {"enum": ["pop", "bounce", "slide", "fade", "typewriter", "none"]},
+        "active": {"enum": ["color", "scale", "color+scale", "pill", "pill+scale", "none"]},
+        "reveal": {"enum": ["word", "page"]},
+        "outline": {"$ref": "#/$defs/paint"},
+        "emphasis": {"type": "array", "items": {"type": "string"}},
+        "emphasis_color": {"$ref": "#/$defs/paint"},
+        "emphasis_scale": {"type": "number", "minimum": 1, "maximum": 2},
+        "active_scale": {"type": "number", "minimum": 1, "maximum": 1.6},
+        "max_width": {"type": "number", "minimum": 0.4, "maximum": 1},
+        "wave": {"$ref": "#/$defs/unit"},
+        "hold": {"type": "number", "minimum": 0, "maximum": 2},
+        "avoid": {"description": "Move kinetic captions off faces and caption_avoid layers (default true).", "type": "boolean"},
+        "position": {"enum": ["top", "center", "bottom"]},
+        "highlight": {"$ref": "#/$defs/paint"},
+        "highlight_text": {"$ref": "#/$defs/paint"},
+        "foreground": {"$ref": "#/$defs/paint"},
+        "background": {"$ref": "#/$defs/paint"},
+        "uppercase": {"type": "boolean"},
+        "max_words": {"type": "integer", "minimum": 1, "maximum": 12},
+        "max_lines": {"type": "integer", "minimum": 1, "maximum": 8},
+        "font": {"$ref": "#/$defs/text"},
+        "font_size": {"type": "number", "minimum": 0.5, "maximum": 2},
+        "stroke": {"$ref": "#/$defs/unit"},
+        "shadow": {"anyOf": [{"type": "boolean"}, {"$ref": "#/$defs/unit"}]},
+        "shadow_color": {"$ref": "#/$defs/paint"},
+        "radius": {"$ref": "#/$defs/unit"},
+        "offset": {"type": "number", "minimum": -0.5, "maximum": 0.5},
+        "align": {"enum": ["left", "center", "right"]},
+        "line_height": {"type": "number", "minimum": 0.8, "maximum": 2.5},
+        "letter_spacing": {"type": "number", "minimum": -0.2, "maximum": 0.5},
+        "padding_x": {"type": "number", "minimum": 0, "maximum": 0.25},
+        "padding_y": {"type": "number", "minimum": 0, "maximum": 0.25},
+        "background_opacity": {"$ref": "#/$defs/unit"},
+        "animation": {"enum": ["none", "pop", "slide", "fade", "rise"]},
+        "speakers": {
+          "description": "Kinetic captions: per-speaker text colour, or {foreground, highlight, emphasis_color}.",
+          "type": "object",
+          "additionalProperties": {"anyOf": [{"$ref": "#/$defs/paint"}, {
+            "type": "object", "additionalProperties": false,
+            "properties": {"foreground": {"$ref": "#/$defs/paint"}, "highlight": {"$ref": "#/$defs/paint"},
+                           "emphasis_color": {"$ref": "#/$defs/paint"}}}]}
+        }
+      }
+    },
+    "master_audio": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "gain": {"type": "number", "minimum": 0, "maximum": 2},
+        "loudness": {"type": "number", "minimum": -40, "maximum": 0},
+        "true_peak": {"type": "number", "minimum": -9, "maximum": 0},
+        "compress": {"type": "boolean"},
+        "stereo_width": {"type": "number", "minimum": 0, "maximum": 2}
+      }
+    },
+    "reverb": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mix": {"$ref": "#/$defs/unit"},
+        "size": {"$ref": "#/$defs/unit"}
+      }
+    },
+    "render": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "crf": {"type": "integer", "minimum": 0, "maximum": 51},
+        "preset": {"enum": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow", "placebo"]},
+        "tune": {"enum": ["animation", "film", "grain", "stillimage", "fastdecode", "zerolatency", "none"]},
+        "audio_bitrate": {"type": "integer", "minimum": 64, "maximum": 512},
+        "captions": {"type": "boolean"},
+        "thumbnail": {"type": "boolean"},
+        "publishing": {"type": "boolean"},
+        "stems": {"type": "boolean"},
+        "supersample": {"type": "integer", "minimum": 1, "maximum": 2},
+        "motion_blur": {"$ref": "#/$defs/unit"},
+        "master": {"type": "boolean"},
+        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647}
+      }
+    },
+    "audio": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "master": {"$ref": "#/$defs/master_audio"},
+        "reverb": {"$ref": "#/$defs/reverb"},
+        "room_tone": {
+          "type": "object", "additionalProperties": false,
+          "oneOf": [{"required": ["sound"]}, {"required": ["file"]}],
+          "properties": {
+            "sound": {"$ref": "#/$defs/text"},
+            "file": {"$ref": "#/$defs/path"},
+            "gain": {"$ref": "#/$defs/unit"}
+          }
+        }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "required": ["name", "tagline", "description", "tags", "mark", "palette"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {"type": "string"},
+        "meta": {"type": "object", "additionalProperties": true},
+        "name": {"$ref": "#/$defs/text"},
+        "handle": {"$ref": "#/$defs/text"},
+        "tagline": {"$ref": "#/$defs/text"},
+        "description": {"$ref": "#/$defs/text"},
+        "tags": {"$ref": "#/$defs/tags"},
+        "mark": {"type": "string", "minLength": 1, "maxLength": 6},
+        "palette": {
+          "type": "object", "required": ["background", "foreground", "accent", "secondary"],
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+          "additionalProperties": {"$ref": "#/$defs/color"}
+        },
+        "font": {"$ref": "#/$defs/path"},
+        "fonts": {
+          "description": "Named font roles resolved by text and caption layers.",
+          "type": "object",
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+          "additionalProperties": {"$ref": "#/$defs/path"}
+        },
+        "brand": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "logo": {"enum": ["disc", "ring", "rounded", "square"]},
+            "banner": {"enum": ["lines", "dots", "grid", "none"]},
+            "mark_size": {"$ref": "#/$defs/unit"},
+            "outline": {"$ref": "#/$defs/unit"},
+            "accent_dot": {"type": "boolean"}
+          }
+        },
+        "scene_library": {"$ref": "#/$defs/path"},
+        "rig_library": {"$ref": "#/$defs/path"},
+        "audio_library": {"$ref": "#/$defs/path"},
+        "music_library": {"$ref": "#/$defs/path"},
+        "captions": {"$ref": "#/$defs/captions"},
+        "style": {"$ref": "#/$defs/style"},
+        "audio": {"$ref": "#/$defs/audio"},
+        "render": {"$ref": "#/$defs/render"},
+        "post": {"$ref": "#/$defs/post"},
+        "motion_blur": {"$ref": "#/$defs/unit"},
+        "banner": {
+          "type": "object", "required": ["width", "height", "safe_width", "safe_height"], "additionalProperties": false,
+          "properties": {
+            "width": {"type": "integer", "minimum": 320, "maximum": 4096},
+            "height": {"type": "integer", "minimum": 160, "maximum": 4096},
+            "safe_width": {"type": "integer", "minimum": 160},
+            "safe_height": {"type": "integer", "minimum": 80}
+          }
+        }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "properties": {
+        "x": {"type": "number", "minimum": -2, "maximum": 3},
+        "y": {"type": "number", "minimum": -2, "maximum": 3},
+        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "scale_x": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "scale_y": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "skew_x": {"type": "number", "minimum": -89, "maximum": 89},
+        "skew_y": {"type": "number", "minimum": -89, "maximum": 89},
+        "frame": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "blur": {"$ref": "#/$defs/unit"},
+        "tint_opacity": {"$ref": "#/$defs/unit"},
+        "rotate": {"type": "number", "minimum": -3600, "maximum": 3600},
+        "opacity": {"$ref": "#/$defs/unit"},
+        "visible": {"type": "boolean"},
+        "wipe": {"description": "Draw-on reveal: 0 hidden, 1 fully shown (see wipe_from).", "$ref": "#/$defs/unit"},
+        "turn_x": {"description": "Perspective turn about the layer's horizontal pivot axis, in degrees.", "type": "number", "minimum": -3600, "maximum": 3600},
+        "turn_y": {"description": "Perspective turn about the layer's vertical pivot axis, in degrees (card flips, coin spins).", "type": "number", "minimum": -3600, "maximum": 3600},
+        "bend": {"description": "Curve the part along its length from the pivot, in degrees (rubber-hose limbs, tails). Children ride the curve.",
+                 "type": "number", "minimum": -340, "maximum": 340},
+        "tint_color": {"description": "Keyable tint colour (hex) applied with tint_opacity.", "$ref": "#/$defs/color"},
+        "fill": {"description": "Keyed fill for rect/ellipse/polygon/text: paint or gradient (see studio/paint.py).",
+                 "anyOf": [{"$ref": "#/$defs/paint"}, {"$ref": "#/$defs/gradient"}]},
+        "stroke_width": {"description": "Keyed stroke width (same units as stroke.width).", "$ref": "#/$defs/unit"},
+        "stroke_color": {"description": "Keyed stroke colour.", "$ref": "#/$defs/paint"},
+        "morph": {"description": "Keyed SVG morph amount (see morph_to).", "type": "number", "minimum": -0.5, "maximum": 1.5},
+        "points": {"description": "Keyed polygon outline (0-1 box fractions); any point count morphs into any other.",
+                   "type": "array", "minItems": 3, "items": {"type": "array", "minItems": 2, "maxItems": 2,
+                                                             "items": {"type": "number"}}},
+        "z": {"description": "Depth into the scene in screen heights; 0 is the picture plane, positive is farther.",
+              "type": "number", "minimum": -0.9, "maximum": 50}
+      }
+    },
+    "keyframe": {
+      "type": "object",
+      "anyOf": [{"required": ["at"]}, {"required": ["at_word"]}, {"required": ["at_beat"]}],
+      "allOf": [{"$ref": "#/$defs/pose"}],
+      "unevaluatedProperties": false,
+      "properties": {
+        "at": {"$ref": "#/$defs/unit"},
+        "at_word": {"$ref": "#/$defs/anchor_word"},
+        "at_beat": {"$ref": "#/$defs/anchor_beat"},
+        "ease": {"$ref": "#/$defs/ease"},
+        "ease_props": {
+          "description": "Per-property easing overrides for this keyframe.",
+          "type": "object",
+          "propertyNames": {"enum": ["x", "y", "scale", "scale_x", "scale_y", "skew_x", "skew_y", "frame", "blur", "tint_opacity", "rotate", "opacity", "z", "wipe", "tint_color", "turn_x", "turn_y", "fill", "stroke_width", "stroke_color", "points", "morph", "bend"]},
+          "additionalProperties": {"$ref": "#/$defs/ease"}
+        }
+      }
+    },
+    "mask": {
+      "type": "object", "required": ["source"], "additionalProperties": false,
+      "properties": {
+        "source": {"$ref": "#/$defs/text"},
+        "scope": {"enum": ["episode", "channel"]},
+        "mode": {"enum": ["alpha", "luma"]},
+        "invert": {"type": "boolean"},
+        "feather": {"$ref": "#/$defs/unit"}
+      }
+    },
+    "layer": {
+      "type": "object", "required": ["id", "kind", "x", "y"],
+      "allOf": [
+        {"$ref": "#/$defs/pose"},
+        {"if": {"required": ["asset_scope"]}, "then": {"properties": {"kind": {"enum": ["image", "svg", "sheet", "video", "particles"]}}}},
+        {"if": {"properties": {"kind": {"const": "sheet"}}}, "then": {"required": ["columns", "rows"]}}
+      ],
+      "unevaluatedProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/text"},
+        "kind": {"enum": ["rect", "ellipse", "polygon", "text", "image", "svg", "sheet", "video", "group", "particles", "use"]},
+        "ref": {"$ref": "#/$defs/text"},
+        "plane": {"enum": ["background", "foreground"]},
+        "asset_scope": {"enum": ["episode", "channel"]},
+        "width": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "height": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "fill": {
+          "description": "Solid paint or a linear/radial gradient.",
+          "anyOf": [{"$ref": "#/$defs/paint"}, {"$ref": "#/$defs/gradient"}]
+        },
+        "stroke": {"$ref": "#/$defs/stroke"},
+        "shadow": {"$ref": "#/$defs/shadow"},
+        "glow": {"$ref": "#/$defs/glow"},
+        "tint": {"$ref": "#/$defs/paint"},
+        "tint_opacity": {"$ref": "#/$defs/unit"},
+        "turn_depth": {"description": "How far this child sits in front of its parent's surface when the parent turns (turn_x/turn_y), as a fraction of the parent's smaller side. 0 follows the parent exactly; face features use about 0.12.",
+                       "type": "number", "minimum": 0, "maximum": 1},
+        "depth_photo": {"description": "Set by make depth-photo; marks the layers of one photo split.", "$ref": "#/$defs/text"},
+        "hero_clip": {"description": "Set by make hero; marks the layer of one AI video clip.", "$ref": "#/$defs/text"},
+        "fit": {"description": "Video layers: contain (default) fits the clip inside the box; cover fills it and crops.", "enum": ["contain", "cover"]},
+        "clip_start": {"description": "Video layers: seconds into the clip to start from.", "type": "number", "minimum": 0, "maximum": 3600},
+        "clip_speed": {"description": "Video layers: playback speed (0.5 = half speed).", "type": "number", "exclusiveMinimum": 0, "maximum": 8},
+        "loop": {"description": "Video layers: wrap to the start instead of holding the last frame.", "type": "boolean"},
+        "video_fps": {"description": "Set by the video expander; do not author.", "type": "number"},
+        "video_frames": {"description": "Set by the video expander; do not author.", "type": "integer"},
+        "lit": {"description": "Shade this layer (and its children) with the shot light; a number scales it.",
+                "anyOf": [{"type": "boolean"}, {"type": "number", "minimum": 0, "maximum": 2}]},
+        "reveal": {"$ref": "#/$defs/reveal"},
+        "trail": {"$ref": "#/$defs/trail"},
+        "font": {"$ref": "#/$defs/text"},
+        "align": {"enum": ["left", "center", "right"]},
+        "line_height": {"type": "number", "minimum": 0.5, "maximum": 3},
+        "letter_spacing": {"type": "number", "minimum": -0.2, "maximum": 0.5},
+        "max_lines": {"type": "integer", "minimum": 1, "maximum": 20},
+        "uppercase": {"type": "boolean"},
+        "radius": {"$ref": "#/$defs/unit"},
+        "text": {"$ref": "#/$defs/text"},
+        "file": {"$ref": "#/$defs/path"},
+        "mouth_for": {"$ref": "#/$defs/text"},
+        "quiet_for": {"description": "Hide this layer while the named speaker is talking (rest mouth).", "$ref": "#/$defs/text"},
+        "talk_only": {"description": "With mouth_for: show only while the speaker is talking.", "type": "boolean"},
+        "role": {"enum": ["body", "head", "eye", "pupil", "brow", "mouth", "arm", "leg", "ear", "antenna", "shadow", "prop", "hair", "nose", "tail"]},
+        "mouth_shape": {"$ref": "#/$defs/text"},
+        "rig": {"description": "Set by defs expansion: the rig a group was built from.", "$ref": "#/$defs/text"},
+        "paint_frames": {"description": "Set by paint expansion: one look per sprite frame.", "type": "array",
+                         "items": {"type": "object"}},
+        "wipe_from": {"enum": ["left", "right", "top", "bottom", "center"]},
+        "boil": {"description": "Hand-drawn line wobble for SVG layers (browser renderers); 0.3-0.6 is subtle.",
+                 "type": "number", "minimum": 0, "maximum": 3},
+        "boil_fps": {"type": "number", "minimum": 1, "maximum": 30},
+        "morph_to": {"description": "SVG to blend into with keyable morph (same structure, different numbers/colours).",
+                     "$ref": "#/$defs/path"},
+        "morph": {"description": "0 = file, 1 = morph_to.", "type": "number", "minimum": -0.5, "maximum": 1.5},
+        "morph_levels": {"description": "Set by morph expansion.", "type": "integer", "minimum": 2},
+        "finish": {
+          "description": "Finish pass for SVG layers (browser renderers): cel shade, rim light, grain and outline.",
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "shade": {"$ref": "#/$defs/unit"}, "rim": {"$ref": "#/$defs/unit"}, "texture": {"$ref": "#/$defs/unit"},
+            "outline": {"description": "Ink line width as a fraction of the artwork size.", "type": "number", "minimum": 0, "maximum": 0.05},
+            "line": {"$ref": "#/$defs/color"}, "shade_color": {"$ref": "#/$defs/color"}, "rim_color": {"$ref": "#/$defs/color"},
+            "light": {"description": "Direction the light comes from, [x, y]; [-1, -1] is top left.",
+                      "type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+            "per": {"enum": ["silhouette", "shapes"]}
+          }
+        },
+        "caption_avoid": {"description": "Kinetic captions move to keep clear of this layer.", "type": "boolean"},
+        "anchor3d": {
+          "description": "Pin this top-level 2D layer to a 3D object's screen position (browser renderers).",
+          "type": "object", "required": ["object"], "additionalProperties": false,
+          "properties": {
+            "object": {"$ref": "#/$defs/text"},
+            "offset": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+            "offset3d": {"$ref": "#/$defs/vector3"},
+            "occlude": {"description": "Hide while another solid 3D object is between the camera and the anchor (default true).",
+                        "type": "boolean"}
+          }
+        },
+        "ik": {
+          "description": "Inverse kinematics limbs solved into rotate keys (see studio/ik.py).",
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["chain", "keys"], "additionalProperties": false,
+            "properties": {
+              "chain": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/text"}},
+              "end": {"$ref": "#/$defs/text"},
+              "tip": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+              "bend": {"enum": [1, -1]},
+              "keys": {
+                "type": "array", "minItems": 1,
+                "items": {
+                  "type": "object", "required": ["t"], "additionalProperties": false,
+                  "properties": {
+                    "t": {"type": "number", "minimum": 0, "maximum": 720},
+                    "x": {"type": "number", "minimum": -2, "maximum": 3},
+                    "y": {"type": "number", "minimum": -2, "maximum": 3},
+                    "layer": {"$ref": "#/$defs/text"},
+                    "release": {"type": "boolean"},
+                    "d": {"type": "number", "minimum": 0, "maximum": 10},
+                    "ease": {"$ref": "#/$defs/ease"}
+                  },
+                  "anyOf": [{"required": ["x", "y"]}, {"required": ["layer"]}, {"required": ["release"]}]
+                }
+              }
+            }
+          }
+        },
+        "tip": {"description": "End of this part (hand, foot) from its pivot in canvas fractions, in its own frame; used by ik.",
+                "type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+        "pose_keys": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["t", "pose"], "additionalProperties": false,
+            "properties": {
+              "t": {"type": "number", "minimum": 0, "maximum": 720},
+              "pose": {"$ref": "#/$defs/text"},
+              "d": {"type": "number", "minimum": 0, "maximum": 10},
+              "ease": {"$ref": "#/$defs/ease"}
+            }
+          }
+        },
+        "motion": {
+          "description": "Timed motion recipes on top of the authored pose (see studio/moves.py).",
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["recipe"],
+            "properties": {
+              "recipe": {"enum": ["pop", "anticipate", "impact", "settle", "shake", "spin", "enter", "exit", "drop", "jump", "nod", "wobble"]},
+              "t": {"type": "number", "minimum": 0, "maximum": 720},
+              "at_word": {"$ref": "#/$defs/anchor_word"},
+              "at_beat": {"$ref": "#/$defs/anchor_beat"},
+              "d": {"type": "number", "exclusiveMinimum": 0, "maximum": 30}
+            }
+          }
+        },
+        "path": {
+          "type": "object", "required": ["points"],
+          "properties": {
+            "points": {"type": "array", "minItems": 2, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}}},
+            "at": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/unit"}},
+            "ease": {"$ref": "#/$defs/ease"},
+            "orient": {"anyOf": [{"type": "boolean"}, {"type": "number"}]},
+            "closed": {"type": "boolean"}
+          }
+        },
+        "wiggle": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["prop"], "additionalProperties": false,
+            "properties": {
+              "prop": {"enum": ["x", "y", "rotate", "scale", "scale_x", "scale_y", "opacity", "skew_x", "skew_y", "bend"]},
+              "amp": {"type": "number"}, "freq": {"type": "number", "exclusiveMinimum": 0, "maximum": 30},
+              "seed": {"type": "integer"}, "octaves": {"type": "integer", "minimum": 1, "maximum": 4},
+              "at": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/unit"}}
+            }
+          }
+        },
+        "follow": {
+          "anyOf": [{"$ref": "#/$defs/follow"}, {"type": "array", "items": {"$ref": "#/$defs/follow"}}]
+        },
+        "alive": {
+          "description": "Automatic idle motion for a rig: breathe, blink, glance, sway and talk.",
+          "anyOf": [{"type": "boolean"}, {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "breathe": {"anyOf": [{"type": "boolean"}, {"type": "number", "minimum": 0, "maximum": 3}]},
+              "blink": {"anyOf": [{"type": "boolean"}, {"type": "number", "minimum": 0, "maximum": 3}]},
+              "look": {"anyOf": [{"type": "boolean"}, {"type": "number", "minimum": 0, "maximum": 3}]},
+              "sway": {"anyOf": [{"type": "boolean"}, {"type": "number", "minimum": 0, "maximum": 3}]},
+              "talk": {"$ref": "#/$defs/text"},
+              "lipsync": {"description": "Viseme lip sync (default when the rig has a viseme mouth set) or loudness flap (false).",
+                          "type": "boolean"},
+              "energy": {"type": "number", "minimum": 0, "maximum": 3},
+              "seed": {"type": "integer", "minimum": 0}
+            }
+          }]
+        },
+        "parent": {"$ref": "#/$defs/text"},
+        "variant_group": {"$ref": "#/$defs/text"},
+        "pivot": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"$ref": "#/$defs/unit"}
+        },
+        "blend": {"enum": ["normal", "add", "screen", "multiply", "overlay", "soft-light"]},
+        "blur": {"$ref": "#/$defs/unit"},
+        "motion_blur": {"$ref": "#/$defs/unit"},
+        "parallax": {"type": "number", "minimum": 0, "maximum": 2},
+        "mask": {"$ref": "#/$defs/mask"},
+        "viseme_for": {"$ref": "#/$defs/text"},
+        "viseme": {"$ref": "#/$defs/text"},
+        "count": {"type": "integer", "minimum": 1, "maximum": 300},
+        "columns": {"type": "integer", "minimum": 1, "maximum": 128},
+        "rows": {"type": "integer", "minimum": 1, "maximum": 128},
+        "rate": {"type": "number", "minimum": 0, "maximum": 300},
+        "life": {"type": "number", "exclusiveMinimum": 0, "maximum": 30},
+        "velocity": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"type": "number", "minimum": 0, "maximum": 20}
+        },
+        "spread": {"type": "number", "minimum": 0, "maximum": 1},
+        "gravity": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"type": "number", "minimum": -20, "maximum": 20}
+        },
+        "size": {
+          "type": "array", "minItems": 1, "maxItems": 2,
+          "items": {"type": "number", "exclusiveMinimum": 0, "maximum": 2}
+        },
+        "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "area": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"type": "number", "minimum": 0, "maximum": 2}
+        },
+        "hitbox": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"type": "number", "exclusiveMinimum": 0, "maximum": 2}
+        },
+        "points": {
+          "type": "array", "minItems": 3,
+          "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/unit"}}
+        },
+        "keyframes": {"type": "array", "items": {"$ref": "#/$defs/keyframe"}}
+      },
+      "if": {"properties": {"kind": {"enum": ["image", "svg", "sheet", "video", "particles"]}}},
+      "then": {"required": ["file"]},
+      "else": {
+        "allOf": [
+          {"if": {"properties": {"kind": {"const": "text"}}}, "then": {"required": ["text"]}},
+          {"if": {"properties": {"kind": {"const": "polygon"}}}, "then": {"required": ["points"]}},
+          {"if": {"properties": {"kind": {"const": "use"}}}, "then": {"required": ["ref"]}},
+          {"if": {"properties": {"kind": {"const": "sheet"}}}, "then": {"required": ["columns", "rows"]}}
+        ]
+      }
+    },
+    "cast_voice": {
+      "type": "object", "required": ["engine", "direction"], "additionalProperties": false,
+      "properties": {
+        "engine": {"enum": ["kokoro", "recorded", "command", "elevenlabs"]},
+        "voice_id": {"description": "ElevenLabs voice ID.", "type": "string", "pattern": "^[A-Za-z0-9]{8,40}$"},
+        "model": {"description": "ElevenLabs model ID.", "type": "string", "pattern": "^[a-z0-9_]{3,60}$"},
+        "voice_settings": {"type": "object", "additionalProperties": false, "properties": {
+          "stability": {"type": "number", "minimum": 0, "maximum": 1},
+          "similarity_boost": {"type": "number", "minimum": 0, "maximum": 1},
+          "style": {"type": "number", "minimum": 0, "maximum": 1},
+          "use_speaker_boost": {"type": "boolean"},
+          "speed": {"type": "number", "minimum": 0.7, "maximum": 1.2}}},
+        "command": {"description": "Local TTS command; {out} is the WAV to write, {text} the line (with input arg).",
+                    "type": "array", "minItems": 1, "items": {"type": "string"}},
+        "input": {"enum": ["stdin", "arg"]},
+        "direction": {"$ref": "#/$defs/text"},
+        "identity": {"$ref": "#/$defs/text"},
+        "character_design": {
+          "type": "object", "required": ["reference", "traits", "voice_fit"], "additionalProperties": false,
+          "properties": {
+            "reference": {"$ref": "#/$defs/path"},
+            "traits": {"$ref": "#/$defs/text"},
+            "voice_fit": {"$ref": "#/$defs/text"},
+            "approved_take": {"$ref": "#/$defs/path"}
+          }
+        },
+        "blend": {
+          "type": "object", "minProperties": 1, "maxProperties": 4,
+          "propertyNames": {"pattern": "^[a-z]{2}_[a-z0-9_]+$"},
+          "additionalProperties": {"type": "number", "exclusiveMinimum": 0, "maximum": 100}
+        },
+        "language": {"enum": ["en-us", "en-gb", "es", "fr-fr", "hi", "it", "pt-br", "ja", "zh"]},
+        "speed": {"type": "number", "minimum": 0.5, "maximum": 2}
+      },
+      "if": {"properties": {"engine": {"const": "kokoro"}}},
+      "then": {"required": ["blend", "language"]},
+      "else": {"if": {"properties": {"engine": {"const": "command"}}},
+               "then": {"required": ["command"], "not": {"anyOf": [{"required": ["blend"]}, {"required": ["language"]}]}},
+               "else": {"if": {"properties": {"engine": {"const": "elevenlabs"}}},
+                        "then": {"required": ["voice_id"], "not": {"anyOf": [
+                          {"required": ["blend"]}, {"required": ["command"]}, {"required": ["speed"]}]}},
+                        "else": {"required": ["identity"], "not": {"anyOf": [
+                          {"required": ["blend"]}, {"required": ["language"]}, {"required": ["speed"]}, {"required": ["command"]},
+                          {"required": ["voice_id"]}, {"required": ["model"]}, {"required": ["voice_settings"]}
+                        ]}}}}
+    },
+    "audio_library": {
+      "type": "object", "required": ["version"], "additionalProperties": false,
+      "properties": {
+        "version": {"type": "integer", "minimum": 1},
+        "voices": {
+          "type": "object", "propertyNames": {"$ref": "#/$defs/text"},
+          "additionalProperties": {"$ref": "#/$defs/cast_voice"}
+        },
+        "sounds": {
+          "type": "object", "propertyNames": {"$ref": "#/$defs/text"},
+          "additionalProperties": {
+            "type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/path"}
+          }
+        }
+      }
+    },
+    "anchor_word": {
+      "description": "Time this to a spoken word in the shot (studio/anchors.py): a word or phrase, or an object.",
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "object", "required": ["word"], "additionalProperties": false,
+         "properties": {
+           "line": {"description": "Index of the shot's speech line (0-based, negative from the end). Omit to search every line.", "type": "integer"},
+           "word": {"description": "A word or phrase in the line's caption text, or a word index.", "oneOf": [{"type": "string", "minLength": 1}, {"type": "integer"}]},
+           "occurrence": {"type": "integer", "minimum": 1},
+           "edge": {"enum": ["start", "middle", "end"]},
+           "offset": {"description": "Seconds after the word (negative: before).", "type": "number", "minimum": -5, "maximum": 5}
+         }}
+      ]
+    },
+    "anchor_beat": {
+      "description": "Time this to the music's beat grid: a 0-based beat count, or bar and beat counted from 1.",
+      "oneOf": [
+        {"type": "number", "minimum": 0, "maximum": 4000},
+        {"type": "object", "required": ["bar"], "additionalProperties": false,
+         "properties": {
+           "bar": {"type": "integer", "minimum": 1},
+           "beat": {"type": "number", "minimum": 1, "maximum": 16},
+           "offset": {"type": "number", "minimum": -5, "maximum": 5}
+         }}
+      ]
+    },
+    "word": {
+      "type": "object", "required": ["text", "start", "end"], "additionalProperties": false,
+      "properties": {
+        "text": {"$ref": "#/$defs/text"},
+        "start": {"type": "number", "minimum": 0, "maximum": 720},
+        "end": {"type": "number", "minimum": 0, "maximum": 720}
+      }
+    },
+    "viseme": {
+      "type": "object", "required": ["at", "shape"], "additionalProperties": false,
+      "properties": {
+        "at": {"type": "number", "minimum": 0, "maximum": 720},
+        "shape": {"$ref": "#/$defs/text"}
+      }
+    },
+    "speech": {
+      "type": "object", "required": ["speaker", "text"], "additionalProperties": false,
+      "properties": {
+        "speaker": {"$ref": "#/$defs/text"},
+        "text": {"$ref": "#/$defs/text"},
+        "caption": {"$ref": "#/$defs/text"},
+        "spoken_text": {"$ref": "#/$defs/text"},
+        "narration": {"description": "false: leave this line out of make narration-check (a stylised voice no recogniser hears).", "type": "boolean"},
+        "delivery": {"$ref": "#/$defs/text"},
+        "pitch": {"description": "Shift the take in semitones (-7..7) without changing its length.", "type": "number", "minimum": -7, "maximum": 7},
+        "pace": {"description": "Speak faster (>1) or slower (<1); Kokoro synthesises at that speed.", "type": "number", "minimum": 0.6, "maximum": 1.6},
+        "intensity": {"description": "0-1: firmer, brighter, more forward delivery (compression and presence).", "$ref": "#/$defs/unit"},
+        "at": {"$ref": "#/$defs/seconds"},
+        "file": {"$ref": "#/$defs/path"},
+        "voice": {"$ref": "#/$defs/text"},
+        "pan": {"type": "number", "minimum": -1, "maximum": 1},
+        "reverb": {"$ref": "#/$defs/unit"},
+        "gain": {"$ref": "#/$defs/unit"},
+        "lead": {"type": "number", "minimum": -10, "maximum": 10},
+        "words": {"type": "array", "items": {"$ref": "#/$defs/word"}},
+        "visemes": {"type": "array", "items": {"$ref": "#/$defs/viseme"}},
+        "lipsync": {"description": "false keeps this line out of automatic lip sync.", "type": "boolean"},
+        "punchline": {"description": "Hold a 0.3 s beat of silence after this line so the joke lands.", "type": "boolean"},
+        "pause_after": {"description": "Seconds of silence after this line before the next one (overrides punchline).", "type": "number", "minimum": 0, "maximum": 2}
+      }
+    },
+    "sfx_layer": {
+      "type": "object", "additionalProperties": false,
+      "oneOf": [{"required": ["cue"]}, {"required": ["file"]}, {"required": ["sound"]}],
+      "dependentRequired": {"variant": ["sound"]},
+      "properties": {
+        "cue": {"enum": ["pop", "whoosh", "chime"]},
+        "sound": {"$ref": "#/$defs/text"},
+        "variant": {"type": "integer", "minimum": 1},
+        "rate": {"type": "number", "minimum": 0.5, "maximum": 1.8},
+        "file": {"$ref": "#/$defs/path"},
+        "gain": {"$ref": "#/$defs/unit"},
+        "offset": {"type": "number", "minimum": -10, "maximum": 10},
+        "lead": {"type": "number", "minimum": -10, "maximum": 10},
+        "pan": {"type": "number", "minimum": -1, "maximum": 1},
+        "reverb": {"$ref": "#/$defs/unit"},
+        "pitch_variance": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "highpass": {"type": "number", "minimum": 20, "maximum": 8000},
+        "lowpass": {"type": "number", "minimum": 200, "maximum": 20000},
+        "punch": {"$ref": "#/$defs/unit"},
+        "saturate": {"$ref": "#/$defs/unit"}
+      }
+    },
+    "sfx": {
+      "type": "object", "additionalProperties": false,
+      "oneOf": [{"required": ["cue"]}, {"required": ["file"]}, {"required": ["sound"]}, {"required": ["layers"]}],
+      "allOf": [{"anyOf": [{"required": ["at"]}, {"required": ["at_word"]}, {"required": ["at_beat"]}]}],
+      "dependentRequired": {"variant": ["sound"]},
+      "properties": {
+        "at": {"$ref": "#/$defs/seconds"},
+        "at_word": {"$ref": "#/$defs/anchor_word"},
+        "at_beat": {"$ref": "#/$defs/anchor_beat"},
+        "cue": {"enum": ["pop", "whoosh", "chime"]},
+        "sound": {"$ref": "#/$defs/text"},
+        "variant": {"type": "integer", "minimum": 1},
+        "rate": {"type": "number", "minimum": 0.5, "maximum": 1.8},
+        "file": {"$ref": "#/$defs/path"},
+        "gain": {"$ref": "#/$defs/unit"},
+        "pan": {"type": "number", "minimum": -1, "maximum": 1},
+        "reverb": {"$ref": "#/$defs/unit"},
+        "pitch_variance": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "lead": {"type": "number", "minimum": -10, "maximum": 10},
+        "fade_in": {"type": "number", "minimum": 0, "maximum": 5},
+        "fade_out": {"type": "number", "minimum": 0, "maximum": 10},
+        "loop": {"type": "boolean"},
+        "spotted": {"type": "boolean"},
+        "highpass": {"type": "number", "minimum": 20, "maximum": 8000},
+        "lowpass": {"type": "number", "minimum": 200, "maximum": 20000},
+        "punch": {"$ref": "#/$defs/unit"},
+        "saturate": {"$ref": "#/$defs/unit"},
+        "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 720},
+        "layers": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/sfx_layer"}}
+      }
+    },
+    "marker_event": {
+      "type": "object", "required": ["kind"], "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["sfx", "camera_shake", "effect"]},
+        "sound": {"$ref": "#/$defs/text"},
+        "cue": {"enum": ["pop", "whoosh", "chime"]},
+        "file": {"$ref": "#/$defs/path"},
+        "gain": {"$ref": "#/$defs/unit"},
+        "pan": {"type": "number", "minimum": -1, "maximum": 1},
+        "reverb": {"$ref": "#/$defs/unit"},
+        "rate": {"type": "number", "minimum": 0.5, "maximum": 1.8},
+        "pitch_variance": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "offset": {"type": "number", "minimum": -10, "maximum": 10},
+        "amplitude": {"type": "number", "minimum": 0, "maximum": 0.2},
+        "frequency": {"type": "number", "minimum": 0.1, "maximum": 60},
+        "decay": {"type": "number", "minimum": 0, "maximum": 1},
+        "seed": {"type": "number"},
+        "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+        "template": {"$ref": "#/$defs/text"},
+        "x": {"type": "number", "minimum": -1, "maximum": 2},
+        "y": {"type": "number", "minimum": -1, "maximum": 2},
+        "width": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "height": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "opacity": {"$ref": "#/$defs/unit"},
+        "rotation": {"type": "number", "minimum": -3600, "maximum": 3600}
+      }
+    },
+    "marker": {
+      "type": "object", "required": ["id", "shot", "at", "events"], "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/text"},
+        "shot": {"$ref": "#/$defs/text"},
+        "at": {"$ref": "#/$defs/unit"},
+        "events": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"$ref": "#/$defs/marker_event"}}
+      }
+    },
+    "ambience": {
+      "type": "object", "additionalProperties": false,
+      "oneOf": [{"required": ["sound"]}, {"required": ["file"]}],
+      "properties": {
+        "sound": {"$ref": "#/$defs/text"},
+        "file": {"$ref": "#/$defs/path"},
+        "start": {"type": "number", "minimum": 0, "maximum": 720},
+        "end": {"type": "number", "exclusiveMinimum": 0, "maximum": 720},
+        "gain": {"$ref": "#/$defs/unit"},
+        "pan": {"type": "number", "minimum": -1, "maximum": 1},
+        "reverb": {"$ref": "#/$defs/unit"},
+        "fade_in": {"type": "number", "minimum": 0, "maximum": 10},
+        "fade_out": {"type": "number", "minimum": 0, "maximum": 10},
+        "loop": {"type": "boolean"}
+      }
+    },
+    "vector3": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "items": {"type": "number", "minimum": -1000, "maximum": 1000}
+    },
+    "scale3": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "items": {"type": "number", "exclusiveMinimum": 0, "maximum": 100}
+    },
+    "lighting": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "ambient": {"type": "number", "minimum": 0, "maximum": 10},
+        "key": {"type": "number", "minimum": 0, "maximum": 10},
+        "position": {"$ref": "#/$defs/vector3"},
+        "target": {"$ref": "#/$defs/vector3"},
+        "color": {"$ref": "#/$defs/color"},
+        "shadows": {"type": "boolean"},
+        "shadow_extent": {"type": "number", "minimum": 0.5, "maximum": 100}
+      }
+    },
+    "three_object": {
+      "type": "object", "required": ["id", "kind", "position"], "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/text"},
+        "kind": {"enum": ["box", "sphere", "cylinder", "torus", "glb", "plane", "cone", "capsule", "text"]},
+        "text": {"$ref": "#/$defs/text"},
+        "font": {"description": "CSS font for flat text planes.", "$ref": "#/$defs/text"},
+        "depth": {"description": "Extrude text this deep (world units; letters are about 0.5 tall). 0 keeps a flat plane.",
+                  "type": "number", "minimum": 0, "maximum": 5},
+        "bevel": {"description": "Rounded edge on extruded text, 0 to 1.", "$ref": "#/$defs/unit"},
+        "typeface": {"description": "TrueType font for extruded text: a channel font role or a .ttf path. Defaults to the channel font.",
+                     "$ref": "#/$defs/text"},
+        "material": {"enum": ["standard", "toon", "basic"]},
+        "opacity": {"$ref": "#/$defs/unit"},
+        "double_sided": {"type": "boolean"},
+        "position": {"$ref": "#/$defs/vector3"},
+        "rotation": {"$ref": "#/$defs/vector3"},
+        "scale": {"$ref": "#/$defs/scale3"},
+        "color": {"$ref": "#/$defs/color"},
+        "file": {"$ref": "#/$defs/path"},
+        "metalness": {"type": "number", "minimum": 0, "maximum": 1},
+        "roughness": {"type": "number", "minimum": 0, "maximum": 1},
+        "emissive": {"$ref": "#/$defs/color"},
+        "emissive_intensity": {"type": "number", "minimum": 0, "maximum": 10},
+        "morph": {"description": "Starting GLB morph target weights by name (or index).",
+                  "type": "object", "additionalProperties": {"type": "number", "minimum": -1, "maximum": 2}},
+        "visible": {"type": "boolean"},
+        "variant_group": {"$ref": "#/$defs/text"},
+        "cast_shadow": {"type": "boolean"},
+        "receive_shadow": {"type": "boolean"},
+        "hitbox": {
+          "type": "object", "required": ["size"], "additionalProperties": false,
+          "properties": {"size": {"$ref": "#/$defs/scale3"}, "center": {"$ref": "#/$defs/vector3"}}
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"const": "glb"}}},
+         "then": {"required": ["file"], "not": {"required": ["color"]}},
+         "else": {"not": {"required": ["file"]}}},
+        {"if": {"properties": {"kind": {"const": "text"}}}, "then": {"required": ["text"]}}
+      ]
+    },
+    "three_particles": {
+      "type": "object", "required": ["position"], "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/text"},
+        "count": {"type": "integer", "minimum": 1, "maximum": 5000},
+        "position": {"$ref": "#/$defs/vector3"},
+        "start": {"type": "number", "minimum": 0, "maximum": 720},
+        "emit": {"enum": ["burst", "continuous"]},
+        "spread": {"$ref": "#/$defs/vector3"},
+        "velocity": {"$ref": "#/$defs/vector3"},
+        "gravity": {"$ref": "#/$defs/vector3"},
+        "life": {"type": "number", "exclusiveMinimum": 0, "maximum": 720},
+        "size": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+        "color": {"$ref": "#/$defs/color"},
+        "opacity": {"$ref": "#/$defs/unit"},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "loop": {"type": "boolean"},
+        "blending": {"enum": ["normal", "additive"]}
+      }
+    },
+    "three_scene": {
+      "type": "object", "required": ["camera", "objects"], "additionalProperties": false,
+      "not": {"required": ["lighting", "lighting_rig"]},
+      "properties": {
+        "camera": {
+          "type": "object", "required": ["position", "target"], "additionalProperties": false,
+          "properties": {
+            "position": {"$ref": "#/$defs/vector3"}, "target": {"$ref": "#/$defs/vector3"},
+            "fov": {"type": "number", "minimum": 10, "maximum": 110}
+          }
+        },
+        "objects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/three_object"}},
+        "particles": {"type": "array", "items": {"$ref": "#/$defs/three_particles"}},
+        "lighting": {"$ref": "#/$defs/lighting"},
+        "lighting_rig": {"$ref": "#/$defs/text"},
+        "lights": {"type": "array", "items": {
+          "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+          "properties": {
+            "id": {"$ref": "#/$defs/text"},
+            "kind": {"enum": ["point", "spot", "hemisphere"]},
+            "color": {"$ref": "#/$defs/color"},
+            "ground": {"$ref": "#/$defs/color"},
+            "intensity": {"type": "number", "minimum": 0, "maximum": 1000},
+            "position": {"$ref": "#/$defs/vector3"},
+            "target": {"$ref": "#/$defs/vector3"},
+            "distance": {"type": "number", "minimum": 0, "maximum": 10000},
+            "angle": {"type": "number", "minimum": 1, "maximum": 89},
+            "penumbra": {"$ref": "#/$defs/unit"},
+            "shadows": {"type": "boolean"}
+          }
+        }},
+        "fog": {
+          "type": "object", "required": ["color"], "additionalProperties": false,
+          "properties": {
+            "color": {"$ref": "#/$defs/color"},
+            "near": {"type": "number", "minimum": 0}, "far": {"type": "number", "exclusiveMinimum": 0},
+            "density": {"type": "number", "exclusiveMinimum": 0, "maximum": 2}
+          }
+        },
+        "environment": {"enum": ["none", "room"], "description": "Image-based light for PBR reflections."},
+        "environment_intensity": {"type": "number", "minimum": 0, "maximum": 10},
+        "quality": {"description": "high: soft 2048 shadows plus ambient occlusion, SMAA and the output pass for every shot in this scene.", "enum": ["standard", "high"]}
+      }
+    },
+    "library": {
+      "type": "object", "required": ["version", "scenes"], "additionalProperties": false,
+      "properties": {
+        "version": {"type": "integer", "minimum": 1},
+        "scenes": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/three_scene"}},
+        "lighting_rigs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/lighting"}}
+      }
+    },
+    "follow": {
+      "type": "object", "required": ["target"], "additionalProperties": false,
+      "properties": {
+        "target": {"$ref": "#/$defs/text"},
+        "mode": {"enum": ["chase", "drag"]},
+        "lag": {"type": "number", "minimum": 0, "maximum": 2},
+        "stiffness": {"type": "number", "exclusiveMinimum": 0, "maximum": 2000},
+        "damping": {"type": "number", "minimum": 0, "maximum": 200},
+        "gain": {"type": "number", "minimum": 0, "maximum": 100},
+        "props": {"type": "array", "items": {"enum": ["x", "y", "rotate", "scale", "scale_x", "scale_y"]}},
+        "offset": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}}
+      }
+    },
+    "rig_library": {
+      "type": "object", "required": ["version", "rigs"], "additionalProperties": false,
+      "properties": {
+        "version": {"type": "integer", "minimum": 1},
+        "rigs": {
+          "type": "object", "minProperties": 1,
+          "propertyNames": {"pattern": "^[A-Za-z0-9_-]+$"},
+          "additionalProperties": {
+            "type": "array", "minItems": 1, "items": {"$ref": "#/$defs/layer"}
+          }
+        },
+        "poses": {
+          "description": "Named poses per rig: {rig: {pose: {part: {prop: value}, mouth: shape}}}.",
+          "type": "object",
+          "additionalProperties": {"type": "object", "additionalProperties": {"type": "object"}}
+        }
+      }
+    },
+    "three_camera_key": {
+      "type": "object", "required": ["at"], "additionalProperties": false,
+      "properties": {
+        "at": {"$ref": "#/$defs/unit"}, "ease": {"$ref": "#/$defs/ease"},
+        "position": {"$ref": "#/$defs/vector3"}, "target": {"$ref": "#/$defs/vector3"},
+        "fov": {"type": "number", "minimum": 10, "maximum": 110}
+      }
+    },
+    "three_object_key": {
+      "type": "object", "required": ["at"], "additionalProperties": false,
+      "properties": {
+        "at": {"$ref": "#/$defs/unit"}, "ease": {"$ref": "#/$defs/ease"},
+        "position": {"$ref": "#/$defs/vector3"}, "rotation": {"$ref": "#/$defs/vector3"},
+        "scale": {"$ref": "#/$defs/scale3"},
+        "visible": {"type": "boolean"},
+        "opacity": {"$ref": "#/$defs/unit"},
+        "emissive_intensity": {"type": "number", "minimum": 0, "maximum": 10},
+        "bones": {"description": "Bone rotation offsets in degrees [x, y, z] by bone name, on top of the rest pose or clip.",
+                  "type": "object", "additionalProperties": {"$ref": "#/$defs/vector3"}},
+        "morph": {"description": "GLB morph target weights by name (or index), e.g. {\"smile\": 0.8}.",
+                  "type": "object", "additionalProperties": {"type": "number", "minimum": -1, "maximum": 2}}
+      }
+    },
+    "three_animation": {
+      "type": "object", "required": ["clip"], "additionalProperties": false,
+      "properties": {
+        "clip": {"$ref": "#/$defs/text"},
+        "at": {"$ref": "#/$defs/seconds"},
+        "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 720},
+        "rate": {"type": "number", "minimum": 0.05, "maximum": 8},
+        "loop": {"type": "boolean"},
+        "weight": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "three_focus_key": {
+      "type": "object", "required": ["at"], "additionalProperties": false,
+      "properties": {
+        "at": {"$ref": "#/$defs/unit"},
+        "distance": {"type": "number", "minimum": 0, "maximum": 1000},
+        "aperture": {"type": "number", "minimum": 0, "maximum": 10}
+      }
+    },
+    "three_shot": {
+      "type": "object", "required": ["scene"], "additionalProperties": false,
+      "properties": {
+        "scene": {"$ref": "#/$defs/text"},
+        "camera": {"type": "array", "items": {"$ref": "#/$defs/three_camera_key"}},
+        "ik": {
+          "description": "3D IK on rigged GLB objects: bone chains reach a point or follow an object (CCD).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object", "required": ["chain", "keys"], "additionalProperties": false,
+              "properties": {
+                "chain": {"type": "array", "minItems": 2, "maxItems": 8, "items": {"$ref": "#/$defs/text"}},
+                "keys": {
+                  "type": "array", "minItems": 1,
+                  "items": {
+                    "type": "object", "required": ["at"], "additionalProperties": false,
+                    "properties": {
+                      "at": {"$ref": "#/$defs/unit"}, "ease": {"$ref": "#/$defs/ease"},
+                      "target": {"$ref": "#/$defs/vector3"}, "object": {"$ref": "#/$defs/text"},
+                      "offset": {"$ref": "#/$defs/vector3"}, "weight": {"$ref": "#/$defs/unit"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "physics": {
+          "description": "Baked rigid-body motion for scene objects (see studio/physics3d.py).",
+          "type": "object", "required": ["bodies"], "additionalProperties": false,
+          "properties": {
+            "gravity": {"type": "number", "minimum": -100, "maximum": 100},
+            "ground": {"type": ["number", "null"]},
+            "start": {"type": "number", "minimum": 0, "maximum": 720},
+            "walls": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number"}},
+            "colliders": {"description": "Other scene objects that bodies hit: auto (every solid object), false, or a list of ids.",
+                          "anyOf": [{"const": "auto"}, {"const": false},
+                                    {"type": "array", "items": {"$ref": "#/$defs/text"}, "uniqueItems": true}]},
+            "bodies": {
+              "type": "object", "minProperties": 1,
+              "additionalProperties": {
+                "type": "object", "additionalProperties": false,
+                "properties": {
+                  "velocity": {"$ref": "#/$defs/vector3"}, "spin": {"$ref": "#/$defs/vector3"},
+                  "bounce": {"type": "number", "minimum": 0, "maximum": 1.2},
+                  "friction": {"type": "number", "minimum": 0, "maximum": 5},
+                  "mass": {"type": "number", "exclusiveMinimum": 0}, "radius": {"type": "number", "exclusiveMinimum": 0},
+                  "half_height": {"type": "number", "exclusiveMinimum": 0},
+                  "fixed": {"type": "boolean"}, "rolls": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        },
+        "quality": {"description": "high adds ambient occlusion, SMAA and the output pass for this shot (soft shadows come from the scene's quality).",
+                    "enum": ["standard", "high"]},
+        "ao": {"description": "Ambient occlusion strength with quality high.", "type": "number", "minimum": 0, "maximum": 2},
+        "camera_rig": {
+          "description": "Generate camera keys from a named move (see studio/rig3d.py).",
+          "type": "object", "required": ["kind"], "additionalProperties": false,
+          "properties": {
+            "kind": {"enum": ["orbit", "dolly", "crane", "flyby", "follow"]},
+            "from": {"anyOf": [{"type": "number"}, {"$ref": "#/$defs/vector3"}]},
+            "to": {"anyOf": [{"type": "number"}, {"$ref": "#/$defs/vector3"}]},
+            "target": {"$ref": "#/$defs/vector3"},
+            "radius": {"type": "number", "exclusiveMinimum": 0},
+            "height": {"type": "number"},
+            "object": {"$ref": "#/$defs/text"},
+            "offset": {"$ref": "#/$defs/vector3"},
+            "lag": {"type": "number", "minimum": 0, "maximum": 3},
+            "fov": {"anyOf": [{"type": "number", "minimum": 10, "maximum": 110},
+                              {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 10, "maximum": 110}}]},
+            "ease": {"$ref": "#/$defs/ease"},
+            "at": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/unit"}},
+            "handheld": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "lights": {
+          "description": "Keyed light changes by light id: intensity, color, position.",
+          "type": "object",
+          "additionalProperties": {"type": "array", "items": {
+            "type": "object", "required": ["at"], "additionalProperties": false,
+            "properties": {
+              "at": {"$ref": "#/$defs/unit"}, "ease": {"$ref": "#/$defs/ease"},
+              "intensity": {"type": "number", "minimum": 0, "maximum": 1000},
+              "position": {"$ref": "#/$defs/vector3"}
+            }
+          }}
+        },
+        "outline": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"thickness": {"type": "number", "minimum": 0, "maximum": 0.05}, "color": {"$ref": "#/$defs/color"}}
+        },
+        "focus": {"type": "array", "items": {"$ref": "#/$defs/three_focus_key"}},
+        "bloom": {"$ref": "#/$defs/unit"},
+        "bloom_radius": {"type": "number", "minimum": 0, "maximum": 2},
+        "bloom_threshold": {"$ref": "#/$defs/unit"},
+        "objects": {
+          "type": "object",
+          "additionalProperties": {"type": "array", "items": {"$ref": "#/$defs/three_object_key"}}
+        },
+        "animations": {
+          "type": "object",
+          "additionalProperties": {"type": "array", "items": {"$ref": "#/$defs/three_animation"}}
+        }
+      }
+    },
+    "id_pair": {
+      "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/text"}
+    },
+    "visual_checks": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "avoid_2d": {"type": "array", "items": {"$ref": "#/$defs/id_pair"}},
+        "keep_in_frame": {"type": "array", "items": {"$ref": "#/$defs/text"}, "uniqueItems": true},
+        "avoid_3d": {"type": "array", "items": {"$ref": "#/$defs/id_pair"}},
+        "ignore_3d": {"description": "3D objects the automatic contact check skips (decals such as mouth discs).",
+                      "type": "array", "items": {"$ref": "#/$defs/text"}, "uniqueItems": true},
+        "contacts": {
+          "type": "array", "items": {
+            "type": "object", "required": ["objects", "at"], "additionalProperties": false,
+            "properties": {
+              "objects": {"$ref": "#/$defs/id_pair"}, "at": {"$ref": "#/$defs/unit"},
+              "tolerance": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
+        },
+        "floor": {
+          "type": "object", "required": ["y", "objects"], "additionalProperties": false,
+          "properties": {
+            "y": {"type": "number", "minimum": -1000, "maximum": 1000},
+            "objects": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/text"}},
+            "tolerance": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "continuity": {
+          "type": "object", "minProperties": 1, "additionalProperties": false,
+          "properties": {
+            "camera": {"const": true}, "lighting": {"const": true},
+            "objects": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/text"}}
+          }
+        }
+      }
+    },
+    "shot": {
+      "type": "object", "required": ["id", "duration", "layers"], "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/text"},
+        "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 720},
+        "direction": {"$ref": "#/$defs/text"},
+        "three": {"$ref": "#/$defs/three_shot"},
+        "checks": {"$ref": "#/$defs/visual_checks"},
+        "background": {"$ref": "#/$defs/paint"},
+        "camera": {"$ref": "#/$defs/camera"},
+        "post": {"$ref": "#/$defs/post"},
+        "light": {"anyOf": [{"$ref": "#/$defs/light2d"}, {"const": false}]},
+        "motion_blur": {"$ref": "#/$defs/unit"},
+        "layers": {"type": "array", "items": {"$ref": "#/$defs/layer"}},
+        "speech": {"type": "array", "items": {"$ref": "#/$defs/speech"}},
+        "sfx": {"type": "array", "items": {"$ref": "#/$defs/sfx"}},
+        "snap": {"description": "Stretch the shot so it ends on the music's next beat (or next bar).", "enum": ["beat", "bar"]},
+        "transition": {
+          "type": "object", "required": ["type", "duration"], "additionalProperties": false,
+          "properties": {
+            "type": {"enum": ["dissolve", "wipe-left", "wipe-right", "wipe-up", "wipe-down", "slide-left", "slide-right", "slide-up", "slide-down", "whip-left", "whip-right", "zoom-in", "zoom-out", "iris", "flash", "dip-to-black", "luma-wipe", "mask"]},
+            "ease": {"$ref": "#/$defs/ease"},
+            "mask": {"$ref": "#/$defs/path"},
+            "mask_scope": {"enum": ["episode", "channel"]},
+            "mask_mode": {"enum": ["alpha", "luma"]},
+            "softness": {"$ref": "#/$defs/unit"},
+            "invert": {"type": "boolean"},
+            "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+            "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 3}
+          },
+          "allOf": [
+            {"if": {"properties": {"type": {"const": "mask"}}}, "then": {"required": ["mask"]}}
+          ]
+        }
+      }
+    },
+    "season": {
+      "type": "object", "required": ["episodes"], "additionalProperties": false,
+      "properties": {
+        "$schema": {"type": "string"},
+        "title": {"$ref": "#/$defs/text"},
+        "meta": {"type": "object", "additionalProperties": true},
+        "channel": {"$ref": "#/$defs/path"},
+        "defaults": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "renderer": {"enum": ["python", "hyperframes", "remotion"]},
+            "preview": {"type": "boolean"},
+            "status": {"type": "string"}
+          }
+        },
+        "episodes": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id"], "additionalProperties": false,
+            "properties": {
+              "id": {"$ref": "#/$defs/text"},
+              "path": {"$ref": "#/$defs/path"},
+              "title": {"$ref": "#/$defs/text"},
+              "status": {"type": "string"},
+              "notes": {"$ref": "#/$defs/text"}
+            }
+          }
+        }
+      }
+    },
+    "thumbnail": {
+      "type": "object", "required": ["shot", "text"], "additionalProperties": false,
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "shot": {"$ref": "#/$defs/text"}, "text": {"$ref": "#/$defs/text"}, "at": {"$ref": "#/$defs/unit"},
+        "hide_layers": {"type": "array", "items": {"$ref": "#/$defs/text"}, "uniqueItems": true},
+        "style": {"enum": ["banner", "lower-third", "center", "minimal", "split"]},
+        "font": {"$ref": "#/$defs/text"},
+        "foreground": {"$ref": "#/$defs/paint"},
+        "background": {"$ref": "#/$defs/paint"},
+        "accent": {"$ref": "#/$defs/paint"},
+        "position": {"enum": ["top", "center", "bottom"]},
+        "align": {"enum": ["left", "center", "right"]},
+        "padding": {"$ref": "#/$defs/unit"},
+        "text_size": {"type": "number", "minimum": 0.5, "maximum": 2}
+      }
+    },
+    "style_lock": {
+      "description": "Channel style lock (style-lock.json): the approved look and rules the studio enforces.",
+      "type": "object", "required": ["version"], "additionalProperties": false,
+      "properties": {
+        "version": {"type": "integer", "minimum": 1},
+        "updated": {"type": "string"},
+        "enforce": {"description": "Refuse episodes that break the lock (default true).", "type": "boolean"},
+        "summary": {"type": "string"},
+        "cast": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "rigs": {"description": "Rig ids the cast may use.", "type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "props": {"description": "Other rigs (props, sets) episodes may use.", "type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "source": {"description": "Where the rigs are built from, relative to the channel.", "type": "string"},
+            "notes": {"type": "object", "additionalProperties": {"type": "string"}},
+            "scale_tolerance": {"description": "Cast members sharing a shot keep the same scale within this fraction.", "type": "number", "minimum": 0}
+          }
+        },
+        "dialogue": {
+          "type": "object", "required": ["allowed"], "additionalProperties": false,
+          "properties": {"allowed": {"type": "boolean"}, "speakers": {"type": "array", "items": {"type": "string"}}}
+        },
+        "runtime": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"min": {"type": "number", "minimum": 0}, "max": {"type": "number", "exclusiveMinimum": 0}}
+        },
+        "format": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"width": {"type": "integer"}, "height": {"type": "integer"}, "fps": {"type": "integer"}}
+        },
+        "grades": {"description": "Allowed post.grade looks; include \"lut\" to allow custom LUTs.", "type": "array", "items": {"type": "string"}},
+        "music": {"type": "object", "additionalProperties": false, "properties": {"allowed": {"type": "boolean"}, "notes": {"type": "string"}}},
+        "sounds": {"type": "object", "additionalProperties": false, "properties": {"library": {"type": "string"}, "notes": {"type": "string"}}},
+        "renderer": {"type": "string"},
+        "forbidden_paths": {"description": "Substrings no episode asset path may contain.", "type": "array", "items": {"type": "string"}},
+        "exempt": {
+          "description": "Episodes made before the lock (by episode folder name); they render as they are.",
+          "type": "array",
+          "items": {"type": "object", "required": ["episode", "reason"], "additionalProperties": false,
+                    "properties": {"episode": {"type": "string"}, "reason": {"type": "string", "minLength": 3}}}
+        },
+        "rules": {"type": "array", "items": {"type": "string"}},
+        "never": {"type": "array", "items": {"type": "string"}},
+        "references": {
+          "type": "array",
+          "items": {"type": "object", "required": ["path"], "additionalProperties": false,
+                    "properties": {"path": {"type": "string"}, "why": {"type": "string"}}}
+        },
+        "changelog": {
+          "type": "array",
+          "items": {"type": "object", "required": ["version", "date", "change"], "additionalProperties": false,
+                    "properties": {"version": {"type": "integer"}, "date": {"type": "string"}, "change": {"type": "string"}}}
+        }
+      }
+    },
+    "episode": {
+      "type": "object", "required": ["title", "description", "tags", "width", "height", "fps", "scenes", "thumbnail"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {"type": "string"},
+        "meta": {"type": "object", "additionalProperties": true},
+        "style_exceptions": {
+          "description": "Approved one-off departures from the channel style lock, each with the user's reason.",
+          "type": "array",
+          "items": {"type": "object", "required": ["rule", "reason"], "additionalProperties": false,
+                    "properties": {"rule": {"enum": ["cast", "forbidden_paths", "dialogue", "runtime", "format", "grades", "music", "scale", "sounds"]},
+                                   "reason": {"type": "string", "minLength": 3}}}
+        },
+        "poses": {
+          "description": "Named poses per rig: {rig: {pose: {part: {prop: value}, mouth: shape}}}.",
+          "type": "object",
+          "additionalProperties": {"type": "object", "additionalProperties": {"type": "object"}}
+        },
+        "defs": {
+          "description": "Named reusable layer groups for rigs, sets and props.",
+          "type": "object",
+          "propertyNames": {"pattern": "^[A-Za-z0-9_-]+$"},
+          "additionalProperties": {
+            "type": "array", "minItems": 1, "items": {"$ref": "#/$defs/layer"}
+          }
+        },
+        "title": {"$ref": "#/$defs/text"},
+        "description": {"$ref": "#/$defs/text"},
+        "tags": {"$ref": "#/$defs/tags"},
+        "width": {"type": "integer", "minimum": 240, "maximum": 3840, "multipleOf": 2},
+        "height": {"type": "integer", "minimum": 240, "maximum": 3840, "multipleOf": 2},
+        "fps": {"enum": [12, 15, 24, 25, 30, 48, 50, 60]},
+        "max_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 720},
+        "supersample": {"type": "integer", "minimum": 1, "maximum": 2},
+        "motion_blur": {"$ref": "#/$defs/unit"},
+        "post": {"$ref": "#/$defs/post"},
+        "light": {"$ref": "#/$defs/light2d"},
+        "captions": {"$ref": "#/$defs/captions"},
+        "style": {"$ref": "#/$defs/style"},
+        "audio": {"$ref": "#/$defs/audio"},
+        "render": {"$ref": "#/$defs/render"},
+        "markers": {"type": "array", "items": {"$ref": "#/$defs/marker"}},
+        "ambience": {"type": "array", "items": {"$ref": "#/$defs/ambience"}},
+        "tiktok": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "caption": {"$ref": "#/$defs/text"},
+            "hashtags": {"type": "array", "items": {"$ref": "#/$defs/text"}, "minItems": 1, "uniqueItems": true}
+          }
+        },
+        "voice": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "name": {"$ref": "#/$defs/text"}, "speed": {"type": "integer", "minimum": 90, "maximum": 240}
+          }
+        },
+        "music": {"$ref": "#/$defs/music"},
+        "scenes": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id", "purpose", "shots"], "additionalProperties": false,
+            "properties": {
+              "id": {"$ref": "#/$defs/text"}, "purpose": {"$ref": "#/$defs/text"},
+              "shots": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/shot"}}
+            }
+          }
+        },
+        "thumbnail": {"$ref": "#/$defs/thumbnail"},
+        "thumbnails": {
+          "description": "Optional A/B thumbnail variants. The first matching shot and text still render as thumbnail.png.",
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/thumbnail"}
+        }
+      }
+    }
+  }
+}
